@@ -1,61 +1,51 @@
-name: Build WDA for iOS 18 (merged xctest)
+name: Build WDA for iOS 16 (Xcode 14)
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-13
     steps:
-      - name: Checkout WebDriverAgent
+      - name: Checkout WDA v8.7.12
         uses: actions/checkout@v4
         with:
           repository: appium/WebDriverAgent
-          ref: master
+          ref: v8.7.12
           submodules: true
 
-      - name: Setup Xcode 16
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '16.2'
-
-      - name: Strip Assets (actool simulator bug)
+      - name: Show toolchain
         run: |
-          sed -i '' '/Assets.xcassets/d' WebDriverAgent.xcodeproj/project.pbxproj || true
-          rm -rf WebDriverAgentRunner/Assets.xcassets
-          rm -rf WebDriverAgentLib/Assets.xcassets 2>/dev/null || true
-          echo "assets stripped"
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          which carthage || echo "no carthage"
 
-      - name: Build WDA (no chained fixups)
+      - name: Bootstrap
         run: |
-          xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner -sdk iphoneos -configuration Release -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO OTHER_LDFLAGS="-Wl,-no_fixup_chains" CONFIGURATION_BUILD_DIR="$PWD/build" > /tmp/build.log 2>&1
+          if [ -f "./Scripts/bootstrap.sh" ]; then
+            bash ./Scripts/bootstrap.sh -d || true
+          else
+            echo "no bootstrap.sh"
+          fi
+          ls -la || true
+
+      - name: Build WDA
+        run: |
+          xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner -sdk iphoneos -configuration Release -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CONFIGURATION_BUILD_DIR="$PWD/build" > /tmp/build.log 2>&1
           EXIT=$?
           echo "xcodebuild exit=$EXIT"
-          [ $EXIT -eq 0 ] || (tail -50 /tmp/build.log; exit $EXIT)
+          [ $EXIT -eq 0 ] || (tail -60 /tmp/build.log; exit $EXIT)
+          echo "=== apps ==="
           find build -name "*.app" -maxdepth 4 -type d
-
-      - name: Strip Apple frameworks (ldid Unsupported Mach-O fix)
-        run: |
-          APP=$(find build -name "*.app" -maxdepth 4 -type d | head -1)
-          echo "stripping from: $APP"
-          rm -rf "$APP/Frameworks/XCTest.framework"
-          rm -rf "$APP/Frameworks/XCTestCore.framework"
-          rm -rf "$APP/Frameworks/Testing.framework"
-          rm -rf "$APP/Frameworks/XCTAutomationSupport.framework"
-          rm -rf "$APP/Frameworks/XCUIAutomation.framework"
-          rm -rf "$APP/Frameworks/XCUnit.framework"
-          rm -rf "$APP/Frameworks/XCTestSupport.framework"
-          rm -rf "$APP/Frameworks/libXCTestSwiftSupport.dylib"
-          rm -rf "$APP/PlugIns/WebDriverAgentRunner.xctest.dSYM"
-          echo "=== remaining Frameworks ==="
-          ls -la "$APP/Frameworks/" 2>/dev/null || echo "(no Frameworks dir)"
-          echo "=== app size ==="
-          du -sh "$APP"
 
       - name: Package IPA
         run: |
           APP=$(find build -name "*.app" -maxdepth 4 -type d | head -1)
           if [ -z "$APP" ]; then echo "NO APP BUILD"; exit 1; fi
+          echo "App: $APP, size:"
+          du -sh "$APP"
+          echo "=== embedded frameworks ==="
+          find "$APP" -name "*.framework" -maxdepth 5 -type d | head -20
           mkdir -p Payload
           cp -r "$APP" Payload/
           zip -qr WebDriverAgent-iOS18.ipa Payload/
