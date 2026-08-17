@@ -19,68 +19,9 @@ jobs:
         with:
           xcode-version: '16.2'
 
-      - name: Show versions
-        run: |
-          xcodebuild -version
-          xcrun --sdk iphoneos --show-sdk-version
-
-      - name: Bootstrap
-        run: |
-          if [ -f "./Scripts/bootstrap.sh" ]; then
-            bash ./Scripts/bootstrap.sh -d
-          fi
-
       - name: Build WDA
         run: |
           xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner -sdk iphoneos -configuration Release -destination generic/platform=iOS CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO clean build CONFIGURATION_BUILD_DIR=$PWD/build 2>&1 | tail -30
-
-      - name: Fix xctest signing
-        run: |
-          APP="$PWD/build/WebDriverAgentRunner-Runner.app"
-          XCTEST="$APP/PlugIns/WebDriverAgentRunner.xctest"
-          FRAMEWORKS="$APP/Frameworks"
-          if [ -d "$XCTEST/Frameworks" ]; then
-            for fw in "$XCTEST/Frameworks/"*.framework; do
-              if [ -d "$fw" ]; then
-                fw_name=$(basename "$fw")
-                cp -R "$fw" "$FRAMEWORKS/$fw_name" 2>/dev/null || true
-              fi
-            done
-            rm -rf "$XCTEST/Frameworks"
-          fi
-          XCTEST_BIN="$XCTEST/WebDriverAgentRunner"
-          if [ -f "$XCTEST_BIN" ]; then
-            mkdir -p "$FRAMEWORKS/WebDriverAgentRunner.framework"
-            cp "$XCTEST_BIN" "$FRAMEWORKS/WebDriverAgentRunner.framework/WebDriverAgentRunner"
-            PLIST_FILE="$FRAMEWORKS/WebDriverAgentRunner.framework/Info.plist"
-            echo '<?xml version="1.0" encoding="UTF-8"?>' > "$PLIST_FILE"
-            echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> "$PLIST_FILE"
-            echo '<plist version="1.0">' >> "$PLIST_FILE"
-            echo '<dict>' >> "$PLIST_FILE"
-            echo '  <key>CFBundleIdentifier</key>' >> "$PLIST_FILE"
-            echo '  <string>com.facebook.WebDriverAgentRunner</string>' >> "$PLIST_FILE"
-            echo '  <key>CFBundleName</key>' >> "$PLIST_FILE"
-            echo '  <string>WebDriverAgentRunner</string>' >> "$PLIST_FILE"
-            echo '  <key>CFBundleExecutable</key>' >> "$PLIST_FILE"
-            echo '  <string>WebDriverAgentRunner</string>' >> "$PLIST_FILE"
-            echo '  <key>CFBundleVersion</key>' >> "$PLIST_FILE"
-            echo '  <string>1</string>' >> "$PLIST_FILE"
-            echo '  <key>CFBundlePackageType</key>' >> "$PLIST_FILE"
-            echo '  <string>FMWK</string>' >> "$PLIST_FILE"
-            echo '</dict>' >> "$PLIST_FILE"
-            echo '</plist>' >> "$PLIST_FILE"
-          fi
-          find "$APP/Frameworks" -name "*.framework" -type d | while read fw; do
-            codesign --force --sign - --timestamp=none --generate-entitlement-der "$fw"
-          done
-          if [ -f "$XCTEST_BIN" ]; then
-            codesign --force --sign - --timestamp=none --generate-entitlement-der "$XCTEST_BIN"
-          fi
-          codesign --force --sign - --timestamp=none --generate-entitlement-der "$XCTEST"
-          codesign --force --sign - --timestamp=none --generate-entitlement-der "$APP"
-          echo "=== Verification ==="
-          codesign -dvvv "$XCTEST_BIN" 2>&1 | head -5
-          codesign --verify --deep "$APP" 2>&1 || true
 
       - name: Package IPA
         run: |
