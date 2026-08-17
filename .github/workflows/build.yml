@@ -26,14 +26,31 @@ jobs:
           rm -rf WebDriverAgentLib/Assets.xcassets 2>/dev/null || true
           echo "assets stripped"
 
-      - name: Build WDA (no chained fixups for TrollStore)
+      - name: Build WDA (no chained fixups)
         run: |
           xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner -sdk iphoneos -configuration Release -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO OTHER_LDFLAGS="-Wl,-no_fixup_chains" CONFIGURATION_BUILD_DIR="$PWD/build" > /tmp/build.log 2>&1
           EXIT=$?
           echo "xcodebuild exit=$EXIT"
           [ $EXIT -eq 0 ] || (tail -50 /tmp/build.log; exit $EXIT)
-          echo "=== apps found ==="
           find build -name "*.app" -maxdepth 4 -type d
+
+      - name: Strip Apple frameworks (ldid Unsupported Mach-O fix)
+        run: |
+          APP=$(find build -name "*.app" -maxdepth 4 -type d | head -1)
+          echo "stripping from: $APP"
+          rm -rf "$APP/Frameworks/XCTest.framework"
+          rm -rf "$APP/Frameworks/XCTestCore.framework"
+          rm -rf "$APP/Frameworks/Testing.framework"
+          rm -rf "$APP/Frameworks/XCTAutomationSupport.framework"
+          rm -rf "$APP/Frameworks/XCUIAutomation.framework"
+          rm -rf "$APP/Frameworks/XCUnit.framework"
+          rm -rf "$APP/Frameworks/XCTestSupport.framework"
+          rm -rf "$APP/Frameworks/libXCTestSwiftSupport.dylib"
+          rm -rf "$APP/PlugIns/WebDriverAgentRunner.xctest.dSYM"
+          echo "=== remaining Frameworks ==="
+          ls -la "$APP/Frameworks/" 2>/dev/null || echo "(no Frameworks dir)"
+          echo "=== app size ==="
+          du -sh "$APP"
 
       - name: Package IPA
         run: |
