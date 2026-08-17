@@ -19,24 +19,23 @@ jobs:
         with:
           xcode-version: '16.2'
 
-      - name: Build WDA
-        continue-on-error: true
+      - name: Strip Assets (actool simulator bug)
         run: |
-          mkdir -p /tmp/wda-artifacts
-          xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner -sdk iphoneos -configuration Release -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CONFIGURATION_BUILD_DIR="$PWD/build" > /tmp/wda-artifacts/build.log 2>&1
-          EXIT=$?
+          sed -i '' '/Assets.xcassets/d' WebDriverAgent.xcodeproj/project.pbxproj || true
+          rm -rf WebDriverAgentRunner/Assets.xcassets
+          rm -rf WebDriverAgentLib/Assets.xcassets 2>/dev/null || true
+          echo "assets stripped"
+
+      - name: Build WDA
+        run: |
+          xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner -sdk iphoneos -configuration Release -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CONFIGURATION_BUILD_DIR="$PWD/build" 2>&1 | tail -30
+          EXIT=${PIPESTATUS[0]}
           echo "xcodebuild exit=$EXIT"
-          if [ $EXIT -ne 0 ]; then
-            cp /tmp/wda-artifacts/build.log /tmp/wda-artifacts/build.log
-            echo "BUILD_FAILED"
-          fi
+          [ $EXIT -eq 0 ] || exit $EXIT
           echo "=== apps found ==="
-          find build -name "*.app" -maxdepth 4 -type d || true
-          echo "=== build dir ==="
-          ls -la build/ 2>/dev/null | head -10 || true
+          find build -name "*.app" -maxdepth 4 -type d
 
       - name: Package IPA
-        if: success()
         run: |
           APP=$(find build -name "*.app" -maxdepth 4 -type d | head -1)
           if [ -z "$APP" ]; then echo "NO APP BUILD"; exit 1; fi
@@ -45,19 +44,9 @@ jobs:
           zip -qr WebDriverAgent-iOS18.ipa Payload/
           ls -lh WebDriverAgent-iOS18.ipa
 
-      - name: Upload IPA
-        if: success()
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: WDA-iOS18-v2
           path: WebDriverAgent-iOS18.ipa
           retention-days: 30
-
-      - name: Upload Build Log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: /tmp/wda-artifacts/
-          retention-days: 7
-          if-no-files-found: ignore
