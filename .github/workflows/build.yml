@@ -1,4 +1,4 @@
-name: Build WDA for iOS 16 (Xcode 15)
+name: Build WDA for iOS 16 (Xcode 15 + entitlements)
 
 on:
   workflow_dispatch:
@@ -13,12 +13,6 @@ jobs:
           repository: appium/WebDriverAgent
           ref: v8.7.12
           submodules: true
-
-      - name: Show toolchain
-        run: |
-          xcodebuild -version
-          xcrun --sdk iphoneos --show-sdk-version
-          which carthage || echo "no carthage"
 
       - name: Bootstrap
         run: |
@@ -35,17 +29,46 @@ jobs:
           EXIT=$?
           echo "xcodebuild exit=$EXIT"
           [ $EXIT -eq 0 ] || (tail -60 /tmp/build.log; exit $EXIT)
-          echo "=== apps ==="
           find build -name "*.app" -maxdepth 4 -type d
+
+      - name: Inject entitlements
+        run: |
+          APP=$(find build -name "*.app" -maxdepth 4 -type d | head -1)
+          if [ -z "$APP" ]; then echo "NO APP"; exit 1; fi
+          cat > /tmp/ent.plist << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.exception.mach-lookup.global-name</key>
+  <array>
+    <string>com.apple.testmanagerd</string>
+    <string>com.apple.assertiond</string>
+  </array>
+  <key>com.apple.security.exception.iosurface.io-client</key>
+  <array/>
+  <key>com.apple.security.exception.iokit-user-client-class</key>
+  <array/>
+  <key>com.apple.private.xpc.launchd.privileged-sanitized</key>
+  <true/>
+  <key>get-task-allow</key>
+  <true/>
+</dict>
+</plist>
+PLIST
+          cat /tmp/ent.plist
+          BIN="$APP/WebDriverAgentRunner-Runner"
+          echo "signing main binary with entitlements..."
+          codesign --force --sign - --entitlements /tmp/ent.plist --timestamp=none "$BIN"
+          echo "verify:"
+          codesign -d --entitlements - "$BIN" 2>&1 | head -25
+          echo "=== done ==="
 
       - name: Package IPA
         run: |
           APP=$(find build -name "*.app" -maxdepth 4 -type d | head -1)
           if [ -z "$APP" ]; then echo "NO APP BUILD"; exit 1; fi
-          echo "App: $APP, size:"
-          du -sh "$APP"
-          echo "=== embedded frameworks ==="
-          find "$APP" -name "*.framework" -maxdepth 5 -type d | head -20
+          rm -rf "$APP/PlugIns/WebDriverAgentRunner.xctest.dSYM"
           mkdir -p Payload
           cp -r "$APP" Payload/
           zip -qr WebDriverAgent-iOS18.ipa Payload/
