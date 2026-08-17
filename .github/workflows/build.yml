@@ -1,11 +1,11 @@
-name: Build WDA for iOS 16 (Xcode 14)
+name: Build WDA for iOS 16 (Xcode 15)
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-13
+    runs-on: macos-14
     steps:
       - name: Checkout WDA v8.7.12
         uses: actions/checkout@v4
