@@ -21,13 +21,18 @@ jobs:
 
       - name: Build WDA
         run: |
-          xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner -sdk iphoneos -configuration Release -destination generic/platform=iOS CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO clean build CONFIGURATION_BUILD_DIR=$PWD/build 2>&1 | tail -30
+          set -o pipefail
+          xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner -sdk iphoneos -configuration Release -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO clean build CONFIGURATION_BUILD_DIR="$PWD/build" 2>&1 | tail -60
+          echo "=== apps found ==="
+          find build -name "*.app" -maxdepth 4 -type d
 
       - name: Package IPA
         run: |
-          mkdir Payload
-          cp -r build/WebDriverAgentRunner-Runner.app Payload/
-          zip -r WebDriverAgent-iOS18.ipa Payload/
+          APP=$(find build -name "*.app" -maxdepth 4 -type d | head -1)
+          if [ -z "$APP" ]; then echo "NO APP BUILD"; exit 1; fi
+          mkdir -p Payload
+          cp -r "$APP" Payload/
+          zip -qr WebDriverAgent-iOS18.ipa Payload/
           ls -lh WebDriverAgent-iOS18.ipa
 
       - name: Upload
