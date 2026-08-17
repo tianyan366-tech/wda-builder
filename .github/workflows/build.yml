@@ -19,10 +19,22 @@ jobs:
         with:
           xcode-version: '16.2'
 
+      - name: Bootstrap
+        run: |
+          if [ -f "./Scripts/bootstrap.sh" ]; then
+            bash ./Scripts/bootstrap.sh -d
+          else
+            echo "no bootstrap script"
+            exit 1
+          fi
+
       - name: Build WDA
         run: |
-          set -o pipefail
-          xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner -sdk iphoneos -configuration Release -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO clean build CONFIGURATION_BUILD_DIR="$PWD/build" 2>&1 | tail -60
+          xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner -sdk iphoneos -configuration Release -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CONFIGURATION_BUILD_DIR="$PWD/build" > /tmp/build.log 2>&1
+          EXIT=$?
+          echo "=== xcodebuild 日志尾部 (exit=$EXIT) ==="
+          tail -80 /tmp/build.log
+          [ $EXIT -eq 0 ] || exit $EXIT
           echo "=== apps found ==="
           find build -name "*.app" -maxdepth 4 -type d
 
