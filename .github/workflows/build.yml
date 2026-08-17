@@ -26,12 +26,12 @@ jobs:
           rm -rf WebDriverAgentLib/Assets.xcassets 2>/dev/null || true
           echo "assets stripped"
 
-      - name: Build WDA
+      - name: Build WDA (no chained fixups for TrollStore)
         run: |
-          xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner -sdk iphoneos -configuration Release -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CONFIGURATION_BUILD_DIR="$PWD/build" 2>&1 | tail -30
-          EXIT=${PIPESTATUS[0]}
+          xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner -sdk iphoneos -configuration Release -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO OTHER_LDFLAGS="-Wl,-no_fixup_chains" CONFIGURATION_BUILD_DIR="$PWD/build" > /tmp/build.log 2>&1
+          EXIT=$?
           echo "xcodebuild exit=$EXIT"
-          [ $EXIT -eq 0 ] || exit $EXIT
+          [ $EXIT -eq 0 ] || (tail -50 /tmp/build.log; exit $EXIT)
           echo "=== apps found ==="
           find build -name "*.app" -maxdepth 4 -type d
 
