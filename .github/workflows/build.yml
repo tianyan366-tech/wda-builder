@@ -19,35 +19,24 @@ jobs:
         with:
           xcode-version: '16.2'
 
-      - name: Bootstrap deps
-        run: |
-          if [ -f "./Scripts/bootstrap.sh" ]; then
-            echo "running bootstrap.sh"
-            bash ./Scripts/bootstrap.sh -d || true
-          else
-            echo "no bootstrap.sh"
-          fi
-          if command -v carthage >/dev/null 2>&1; then
-            echo "running carthage bootstrap"
-            carthage bootstrap --platform iOS 2>&1 | tail -15 || true
-          else
-            echo "no carthage"
-          fi
-          ls -la Carthage/Build 2>/dev/null || echo "no carthage build dir"
-          ls -la WebDriverAgentRunner/ 2>/dev/null | head -5
-
       - name: Build WDA
+        continue-on-error: true
         run: |
-          xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner -sdk iphoneos -configuration Release -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CONFIGURATION_BUILD_DIR="$PWD/build" > /tmp/build.log 2>&1
+          mkdir -p /tmp/wda-artifacts
+          xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner -sdk iphoneos -configuration Release -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CONFIGURATION_BUILD_DIR="$PWD/build" > /tmp/wda-artifacts/build.log 2>&1
           EXIT=$?
+          echo "xcodebuild exit=$EXIT"
           if [ $EXIT -ne 0 ]; then
-            tail -50 /tmp/build.log | while IFS= read -r line; do echo "::error::$line"; done
-            exit $EXIT
+            cp /tmp/wda-artifacts/build.log /tmp/wda-artifacts/build.log
+            echo "BUILD_FAILED"
           fi
           echo "=== apps found ==="
-          find build -name "*.app" -maxdepth 4 -type d
+          find build -name "*.app" -maxdepth 4 -type d || true
+          echo "=== build dir ==="
+          ls -la build/ 2>/dev/null | head -10 || true
 
       - name: Package IPA
+        if: success()
         run: |
           APP=$(find build -name "*.app" -maxdepth 4 -type d | head -1)
           if [ -z "$APP" ]; then echo "NO APP BUILD"; exit 1; fi
@@ -56,9 +45,19 @@ jobs:
           zip -qr WebDriverAgent-iOS18.ipa Payload/
           ls -lh WebDriverAgent-iOS18.ipa
 
-      - name: Upload
+      - name: Upload IPA
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: WDA-iOS18-v2
           path: WebDriverAgent-iOS18.ipa
           retention-days: 30
+
+      - name: Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: /tmp/wda-artifacts/
+          retention-days: 7
+          if-no-files-found: ignore
