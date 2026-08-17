@@ -1,6 +1,8 @@
-name: Build WDA for iOS 16 (Xcode 15 + entitlements)
+name: Build WDA v13 entitlements
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -13,15 +15,6 @@ jobs:
           repository: appium/WebDriverAgent
           ref: v8.7.12
           submodules: true
-
-      - name: Bootstrap
-        run: |
-          if [ -f "./Scripts/bootstrap.sh" ]; then
-            bash ./Scripts/bootstrap.sh -d || true
-          else
-            echo "no bootstrap.sh"
-          fi
-          ls -la || true
 
       - name: Build WDA
         run: |
@@ -56,7 +49,6 @@ jobs:
 </dict>
 </plist>
 PLIST
-          cat /tmp/ent.plist
           BIN="$APP/WebDriverAgentRunner-Runner"
           echo "signing main binary with entitlements..."
           codesign --force --sign - --entitlements /tmp/ent.plist --timestamp=none "$BIN"
